@@ -23,6 +23,15 @@ const TYPE_COLORS: Record<string, { bg: string; text: string; accent: string }> 
   Psíquico: { bg: "rgba(240,98,146,0.12)",  text: "#F06292", accent: "#F06292" },
   Pedra:    { bg: "rgba(161,136,127,0.12)", text: "#A1887F", accent: "#A1887F" },
   Lutador:  { bg: "rgba(255,138,101,0.12)", text: "#FF8A65", accent: "#FF8A65" },
+  Venenoso: { bg: "rgba(186,104,200,0.12)", text: "#BA68C8", accent: "#BA68C8" },
+  Terra:    { bg: "rgba(215,160,110,0.12)", text: "#D7A06E", accent: "#D7A06E" },
+  Voador:   { bg: "rgba(144,202,249,0.12)", text: "#90CAF9", accent: "#90CAF9" },
+  Inseto:   { bg: "rgba(156,204,101,0.12)", text: "#9CCC65", accent: "#9CCC65" },
+  Dragão:   { bg: "rgba(92,107,192,0.12)",  text: "#5C6BC0", accent: "#5C6BC0" },
+  Sombrio:  { bg: "rgba(110,110,110,0.12)", text: "#8E8E8E", accent: "#8E8E8E" },
+  Aço:      { bg: "rgba(144,164,174,0.12)", text: "#90A4AE", accent: "#90A4AE" },
+  Fada:     { bg: "rgba(244,143,177,0.12)", text: "#F48FB1", accent: "#F48FB1" },
+  Gelo:     { bg: "rgba(128,222,234,0.12)", text: "#80DEEA", accent: "#80DEEA" },
 };
 
 const DEFAULT_COLORS = { bg: "rgba(255,255,255,0.06)", text: "#8FA8C0", accent: "#8FA8C0" };
