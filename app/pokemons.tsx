@@ -10,6 +10,8 @@ import { useState, useEffect } from "react";
 import { Redirect } from "expo-router";
 
 import { PokemonCard } from "../components/PokemonCard";
+import { PokemonDetailsModal } from "../components/PokemonDetailsModal";
+import { BottomNavigation } from "../components/BottomNavigation";
 import { Button } from "../components/Button";
 import { useAuth } from "../context/AuthContext";
 import { fetchPokemons, Pokemon } from "../services/pokemon.service";
@@ -20,6 +22,10 @@ export default function Pokemons() {
   const [pokemonList, setPokemonList] = useState<Pokemon[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Estados para o Modal de Detalhes
+  const [selectedPokemon, setSelectedPokemon] = useState<Pokemon | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const loadPokemons = async () => {
     try {
@@ -37,6 +43,11 @@ export default function Pokemons() {
   useEffect(() => {
     loadPokemons();
   }, []);
+
+  const handleCardPress = (pokemon: Pokemon) => {
+    setSelectedPokemon(pokemon);
+    setModalVisible(true);
+  };
 
   if (!isLogged) {
     return <Redirect href="/" />;
@@ -101,10 +112,21 @@ export default function Pokemons() {
               nome={item.nome}
               tipo={item.tipo}
               imagem={item.imagem}
+              onPress={() => handleCardPress(item)}
             />
           )}
         />
       )}
+
+      {/* Pop-up de Informações Detalhadas */}
+      <PokemonDetailsModal
+        pokemon={selectedPokemon}
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+      />
+
+      {/* Navegação Inferior Flutuante */}
+      <BottomNavigation activeTab="pokemons" />
     </View>
   );
 }
@@ -227,7 +249,7 @@ const styles = StyleSheet.create({
   // Lista
   list: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 110, // Aumentado para não ser coberto pelo BottomNavigation flutuante
   },
   sectionTitle: {
     fontSize: 13,
@@ -237,4 +259,4 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 16,
   },
-});
+});
