@@ -17,6 +17,7 @@ import {
 import { Redirect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
 import { BottomNavigation } from "../components/BottomNavigation";
@@ -75,8 +76,9 @@ const reservaBadgeStyle = StyleSheet.create({
   },
 });
 
-export default function Team() {
+export default function Team({ isTab = false }: { isTab?: boolean }) {
   const { isLogged, userId } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [teamName, setTeamName] = useState("Meu Time Pokémon");
   const [titulares, setTitulares] = useState<(Pokemon | null)[]>([null, null, null, null, null]);
@@ -323,20 +325,22 @@ export default function Team() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0D1B2A" />
+      {!isTab && <StatusBar barStyle="light-content" backgroundColor="#0D1B2A" />}
 
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.pokeballHeader}>
-            <View style={styles.pokeballTop} />
-            <View style={styles.pokeballStripe} />
-            <View style={styles.pokeballBottom} />
-            <View style={styles.pokeballBtn} />
+      {!isTab && (
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <View style={styles.headerLeft}>
+            <View style={styles.pokeballHeader}>
+              <View style={styles.pokeballTop} />
+              <View style={styles.pokeballStripe} />
+              <View style={styles.pokeballBottom} />
+              <View style={styles.pokeballBtn} />
+            </View>
+            <Text style={styles.headerTitle}>MEU TIME</Text>
           </View>
-          <Text style={styles.headerTitle}>MEU TIME</Text>
         </View>
-      </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Editor de Nome */}
@@ -528,12 +532,12 @@ export default function Team() {
         </View>
       </Modal>
 
-      <BottomNavigation activeTab="team" />
+      {!isTab && <BottomNavigation activeTab="team" />}
     </View>
   );
 }
 
-const RESERVA_CELL = (SCREEN_WIDTH - 40 - 24) / 5;
+const RESERVA_CELL = (SCREEN_WIDTH - 40 - 12) / 3;
 
 const styles = StyleSheet.create({
   container: {

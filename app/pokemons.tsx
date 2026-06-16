@@ -6,10 +6,17 @@ import {
   StatusBar,
   ActivityIndicator,
   TextInput,
+  Dimensions,
+  ScrollView,
+  LayoutAnimation,
+  UIManager,
+  Platform,
+  Animated,
 } from "react-native";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PokemonCard } from "../components/PokemonCard";
 import { PokemonDetailsModal } from "../components/PokemonDetailsModal";
@@ -18,9 +25,28 @@ import { Button } from "../components/Button";
 import { useAuth } from "../context/AuthContext";
 import { fetchPokemons, Pokemon } from "../services/pokemon.service";
 
+import Team from "./team";
+import Profile from "./profile";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// Habilita animações no Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+type TabType = "pokemons" | "team" | "profile";
+
 export default function Pokemons() {
   const { isLogged, logout } = useAuth();
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
+  const [activeTab, setActiveTab] = useState<TabType>("pokemons");
   const [pokemonList, setPokemonList] = useState<Pokemon[]>([]);
   const [filteredList, setFilteredList] = useState<Pokemon[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,13 +89,28 @@ export default function Pokemons() {
     setModalVisible(true);
   };
 
+  const handleTabPress = (tab: TabType) => {
+    setActiveTab(tab);
+    const index = tab === "pokemons" ? 0 : tab === "team" ? 1 : 2;
+    scrollViewRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true });
+  };
+
+  const handleScroll = (event: any) => {
+    const scrollOffset = event.nativeEvent.contentOffset.x;
+    const index = Math.round(scrollOffset / SCREEN_WIDTH);
+    const tabs: TabType[] = ["pokemons", "team", "profile"];
+    if (tabs[index] && tabs[index] !== activeTab) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setActiveTab(tabs[index]);
+    }
+  };
+
   if (!isLogged) return <Redirect href="/" />;
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0D1B2A" />
-
-      <View style={styles.header}>
+      {/* Header Padronizado */}
+      <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top + 8 : 16 }]}>
         <View style={styles.headerLeft}>
           <View style={styles.pokeball}>
             <View style={styles.pokeballTop} />
@@ -78,70 +119,111 @@ export default function Pokemons() {
             <View style={styles.pokeballBtn} />
           </View>
           <View>
-            <Text style={styles.headerTitle}>POKÉDEX</Text>
-            <Text style={styles.headerSub}>
-              {loading ? "Carregando..." : `${pokemonList.length} pokémons`}
+            <Text style={styles.headerTitle}>
+              {activeTab === "pokemons"
+                ? "POKÉDEX"
+                : activeTab === "team"
+                ? "MEU TIME"
+                : "PERFIL DO TREINADOR"}
             </Text>
+            {activeTab === "pokemons" && (
+              <Text style={styles.headerSub}>
+                {loading ? "Carregando..." : `${pokemonList.length} pokémons`}
+              </Text>
+            )}
           </View>
         </View>
-        <Button title="Sair" onPress={logout} variant="danger" style={{ width: 90, marginTop: 0 }} />
+        <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.7}>
+          <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#E53935" size="large" />
-          <Text style={styles.loadingText}>Carregando Pokédex...</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Button title="Tentar Novamente" onPress={loadPokemons} style={{ width: 220 }} />
-        </View>
-      ) : (
-        <FlatList
-          data={filteredList}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <>
-              {/* Search Bar */}
-              <View style={styles.searchBarContainer}>
-                <Ionicons name="search" size={18} color="#8FA8C0" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchBar}
-                  placeholder="Pesquisar por nome ou ID..."
-                  placeholderTextColor="#8FA8C0"
-                  value={searchQuery}
-                  onChangeText={handleSearch}
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                />
-                {searchQuery.length > 0 && (
-                  <Ionicons
-                    name="close-circle"
-                    size={18}
-                    color="#8FA8C0"
-                    onPress={() => handleSearch("")}
-                  />
-                )}
-              </View>
+      <Animated.ScrollView
+        ref={scrollViewRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScroll}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ width: SCREEN_WIDTH * 3 }}
+        bounces={false}
+      >
+        {/* Slide 1: Pokédex */}
+        <View style={{ width: SCREEN_WIDTH, height: "100%" }}>
 
-              <Text style={styles.sectionTitle}>
-                {searchQuery ? `${filteredList.length} resultado(s)` : "Seus Pokémons"}
-              </Text>
-            </>
-          }
-          renderItem={({ item }) => (
-            <PokemonCard
-              nome={item.nome}
-              tipo={item.tipo}
-              imagem={item.imagem}
-              onPress={() => handleCardPress(item)}
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color="#E53935" size="large" />
+              <Text style={styles.loadingText}>Carregando Pokédex...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Button title="Tentar Novamente" onPress={loadPokemons} style={{ width: 220 }} />
+            </View>
+          ) : (
+            <FlatList
+              data={filteredList}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.list}
+              showsVerticalScrollIndicator={false}
+              ListHeaderComponent={
+                <>
+                  {/* Search Bar */}
+                  <View style={styles.searchBarContainer}>
+                    <Ionicons name="search" size={18} color="#8FA8C0" style={styles.searchIcon} />
+                    <TextInput
+                      style={styles.searchBar}
+                      placeholder="Pesquisar por nome ou ID..."
+                      placeholderTextColor="#8FA8C0"
+                      value={searchQuery}
+                      onChangeText={handleSearch}
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                    />
+                    {searchQuery.length > 0 && (
+                      <Ionicons
+                        name="close-circle"
+                        size={18}
+                        color="#8FA8C0"
+                        onPress={() => handleSearch("")}
+                      />
+                    )}
+                  </View>
+
+                  <Text style={styles.sectionTitle}>
+                    {searchQuery ? `${filteredList.length} resultado(s)` : "Seus Pokémons"}
+                  </Text>
+                </>
+              }
+              renderItem={({ item }) => (
+                <PokemonCard
+                  nome={item.nome}
+                  tipo={item.tipo}
+                  imagem={item.imagem}
+                  onPress={() => handleCardPress(item)}
+                />
+              )}
             />
           )}
-        />
-      )}
+        </View>
+
+        {/* Slide 2: Meu Time */}
+        <View style={{ width: SCREEN_WIDTH, height: "100%" }}>
+          <Team isTab={true} />
+        </View>
+
+        {/* Slide 3: Perfil */}
+        <View style={{ width: SCREEN_WIDTH, height: "100%" }}>
+          <Profile isTab={true} />
+        </View>
+      </Animated.ScrollView>
 
       <PokemonDetailsModal
         pokemon={selectedPokemon}
@@ -149,7 +231,7 @@ export default function Pokemons() {
         onClose={() => setModalVisible(false)}
       />
 
-      <BottomNavigation activeTab="pokemons" />
+      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} scrollX={scrollX} />
     </View>
   );
 }
@@ -182,6 +264,16 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: "900", color: "#fff", letterSpacing: 3 },
   headerSub: { fontSize: 11, color: "rgba(255,255,255,0.75)", letterSpacing: 0.5, marginTop: 1 },
+  logoutBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#263850",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 16 },
   loadingText: { fontSize: 16, color: "#8FA8C0", fontWeight: "600", letterSpacing: 0.5 },
   errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32, gap: 20 },

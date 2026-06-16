@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNavigation } from "../components/BottomNavigation";
 import { Button } from "../components/Button";
@@ -24,8 +25,9 @@ import { apiService } from "../services/api.service";
 
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1713194723780-29a0400e3d0b?q=80&w=300&300=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
 
-export default function Profile() {
+export default function Profile({ isTab = false }: { isTab?: boolean }) {
   const { isLogged, userId, logout } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [nome, setNome] = useState("");
   const [usuario, setUsuario] = useState("");
@@ -125,15 +127,17 @@ export default function Profile() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#0D1B2A" />
+      {!isTab && <StatusBar barStyle="light-content" backgroundColor="#0D1B2A" />}
 
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>PERFIL DO TREINADOR</Text>
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.7}>
-          <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+      {!isTab && (
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <Text style={styles.headerTitle}>PERFIL DO TREINADOR</Text>
+          <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.7}>
+            <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -236,7 +240,7 @@ export default function Profile() {
         </View>
       </ScrollView>
 
-      <BottomNavigation activeTab="profile" />
+      {!isTab && <BottomNavigation activeTab="profile" />}
     </KeyboardAvoidingView>
   );
 }

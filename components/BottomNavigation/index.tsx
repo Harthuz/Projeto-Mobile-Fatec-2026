@@ -4,17 +4,34 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
+  LayoutAnimation,
+  UIManager,
+  Animated,
+  Dimensions,
 } from "react-native";
+import { useRef, useEffect } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// Habilita animação de layout no Android se disponível
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type TabType = "pokemons" | "team" | "profile";
 
 type Props = {
   activeTab: TabType;
+  onTabPress?: (key: TabType) => void;
+  scrollX?: Animated.Value;
 };
 
-export function BottomNavigation({ activeTab }: Props) {
+export function BottomNavigation({ activeTab, onTabPress, scrollX }: Props) {
   const tabs = [
     {
       key: "pokemons" as TabType,
@@ -39,14 +56,57 @@ export function BottomNavigation({ activeTab }: Props) {
     },
   ];
 
+  // Configura um valor animado local caso scrollX não seja passado
+  const localScrollX = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!scrollX) {
+      const targetIndex = activeTab === "pokemons" ? 0 : activeTab === "team" ? 1 : 2;
+      Animated.timing(localScrollX, {
+        toValue: targetIndex * SCREEN_WIDTH,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [activeTab, scrollX]);
+
+  const activeScrollX = scrollX || localScrollX;
+
+  const BAR_WIDTH = SCREEN_WIDTH - 40;
+  const TAB_WIDTH = BAR_WIDTH / 3;
+  const INDICATOR_WIDTH = 24;
+  const INDICATOR_LEFT = (TAB_WIDTH - INDICATOR_WIDTH) / 2;
+
+  // Interpolação para mover a linha continuamente de acordo com o swipe
+  const translateX = activeScrollX.interpolate({
+    inputRange: [0, SCREEN_WIDTH, SCREEN_WIDTH * 2],
+    outputRange: [0, TAB_WIDTH, TAB_WIDTH * 2],
+    extrapolate: "clamp",
+  });
+
   const handlePress = (route: string, key: TabType) => {
     if (activeTab === key) return;
-    router.replace(route as any);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (onTabPress) {
+      onTabPress(key);
+    } else {
+      router.replace(route as any);
+    }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.navBar}>
+        {/* Indicador animado que desliza junto com o swipe do dedo */}
+        <Animated.View
+          style={[
+            styles.glowIndicator,
+            {
+              left: INDICATOR_LEFT,
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+
         {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           return (
@@ -56,9 +116,6 @@ export function BottomNavigation({ activeTab }: Props) {
               onPress={() => handlePress(tab.route, tab.key)}
               activeOpacity={0.7}
             >
-              {/* Pokéball Glow Indicator */}
-              {isActive && <View style={styles.glowIndicator} />}
-
               <Ionicons
                 name={isActive ? tab.iconActive : tab.iconInactive}
                 size={22}
@@ -93,6 +150,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.08)",
     justifyContent: "space-around",
     alignItems: "center",
+    position: "relative",
     // Sombra premium
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
@@ -110,7 +168,7 @@ const styles = StyleSheet.create({
   },
   glowIndicator: {
     position: "absolute",
-    top: -12,
+    top: 0,
     width: 24,
     height: 4,
     borderRadius: 2,
