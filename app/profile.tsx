@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { documentDirectory, copyAsync } from "expo-file-system";
+import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
@@ -91,8 +91,8 @@ export default function Profile({ isTab = false }: { isTab?: boolean }) {
           await AsyncStorage.setItem("@profile_avatar", pickedUri);
         } else {
           const localFilename = "profile_avatar.jpg";
-          const localDest = documentDirectory + localFilename;
-          await copyAsync({ from: pickedUri, to: localDest });
+          const localDest = FileSystem.documentDirectory + localFilename;
+          await FileSystem.copyAsync({ from: pickedUri, to: localDest });
           setAvatarUri(localDest);
           await AsyncStorage.setItem("@profile_avatar", localDest);
         }
