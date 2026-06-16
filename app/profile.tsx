@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
+import { documentDirectory, copyAsync } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
@@ -20,17 +20,18 @@ import { BottomNavigation } from "../components/BottomNavigation";
 import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import { useAuth } from "../context/AuthContext";
+import { apiService } from "../services/api.service";
 
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1713194723780-29a0400e3d0b?q=80&w=300&300=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
 
 export default function Profile() {
-  const { isLogged, logout } = useAuth();
+  const { isLogged, userId, logout } = useAuth();
 
   const [nome, setNome] = useState("");
   const [usuario, setUsuario] = useState("");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
-  const [partidas, setPartidas] = useState(0);
+  const [level, setLevel] = useState(1);
   const [vitorias, setVitorias] = useState(0);
   const [derrotas, setDerrotas] = useState(0);
 
@@ -39,26 +40,28 @@ export default function Profile() {
 
   useEffect(() => {
     async function loadProfileData() {
+      if (!userId) return;
       try {
         const savedNome = await AsyncStorage.getItem("@profile_nome");
-        const savedUsuario = await AsyncStorage.getItem("@profile_username");
         const savedAvatar = await AsyncStorage.getItem("@profile_avatar");
-        const savedPartidas = await AsyncStorage.getItem("@profile_partidas");
-        const savedVitorias = await AsyncStorage.getItem("@profile_vitorias");
-        const savedDerrotas = await AsyncStorage.getItem("@profile_derrotas");
 
         if (savedNome) setNome(savedNome);
-        if (savedUsuario) setUsuario(savedUsuario);
         if (savedAvatar) setAvatarUri(savedAvatar);
-        if (savedPartidas) setPartidas(Number(savedPartidas));
-        if (savedVitorias) setVitorias(Number(savedVitorias));
-        if (savedDerrotas) setDerrotas(Number(savedDerrotas));
+
+        // Carrega dados dinâmicos da API
+        const stats = await apiService.getStats(userId);
+        if (stats) {
+          setUsuario(stats.username || "");
+          setLevel(stats.level ?? 1);
+          setVitorias(stats.vitorias ?? 0);
+          setDerrotas(stats.derrotas ?? 0);
+        }
       } catch (err) {
-        console.error("Erro ao carregar dados do perfil:", err);
+        console.error("Erro ao carregar dados do perfil via API:", err);
       }
     }
     loadProfileData();
-  }, []);
+  }, [userId]);
 
   if (!isLogged) {
     return <Redirect href="/" />;
@@ -86,8 +89,8 @@ export default function Profile() {
           await AsyncStorage.setItem("@profile_avatar", pickedUri);
         } else {
           const localFilename = "profile_avatar.jpg";
-          const localDest = FileSystem.documentDirectory + localFilename;
-          await FileSystem.copyAsync({ from: pickedUri, to: localDest });
+          const localDest = documentDirectory + localFilename;
+          await copyAsync({ from: pickedUri, to: localDest });
           setAvatarUri(localDest);
           await AsyncStorage.setItem("@profile_avatar", localDest);
         }
@@ -103,7 +106,6 @@ export default function Profile() {
     setSuccessMsg("");
     try {
       await AsyncStorage.setItem("@profile_nome", nome);
-      await AsyncStorage.setItem("@profile_username", usuario);
       setSuccessMsg("Perfil salvo com sucesso!");
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (err) {
@@ -114,8 +116,9 @@ export default function Profile() {
     }
   };
 
-  // Taxa de vitória calculada
-  const winRate = partidas > 0 ? Math.round((vitorias / partidas) * 100) : 0;
+  // Taxa de vitória calculada (vitórias / total de partidas)
+  const totalPartidas = vitorias + derrotas;
+  const winRate = totalPartidas > 0 ? Math.round((vitorias / totalPartidas) * 100) : 0;
 
   return (
     <KeyboardAvoidingView
@@ -173,9 +176,10 @@ export default function Profile() {
           <Input
             placeholder="Nome de usuário"
             value={usuario}
-            onChangeText={setUsuario}
+            editable={false} // Usuário vem da API/Login e não é editável diretamente
             autoCapitalize="none"
             autoCorrect={false}
+            style={{ opacity: 0.6 }}
           />
 
           {successMsg ? <Text style={styles.successText}>{successMsg}</Text> : null}
@@ -197,11 +201,11 @@ export default function Profile() {
 
           {/* Grid de stats */}
           <View style={styles.statsGrid}>
-            {/* Partidas */}
+            {/* Nível */}
             <View style={[styles.statBox, styles.statBoxPartidas]}>
               <Ionicons name="flash" size={22} color="#FFD600" style={styles.statIcon} />
-              <Text style={[styles.statNumber, { color: "#FFD600" }]}>{partidas}</Text>
-              <Text style={styles.statLabel}>Partidas</Text>
+              <Text style={[styles.statNumber, { color: "#FFD600" }]}>{level}</Text>
+              <Text style={styles.statLabel}>Nível</Text>
             </View>
 
             {/* Vitórias */}
@@ -220,7 +224,7 @@ export default function Profile() {
           </View>
 
           {/* Taxa de vitória */}
-          {partidas > 0 && (
+          {totalPartidas > 0 && (
             <View style={styles.winRateRow}>
               <Text style={styles.winRateLabel}>Taxa de Vitória</Text>
               <View style={styles.winRateBar}>

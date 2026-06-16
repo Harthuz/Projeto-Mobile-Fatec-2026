@@ -21,6 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { BottomNavigation } from "../components/BottomNavigation";
 import { fetchPokemons, Pokemon } from "../services/pokemon.service";
+import { apiService } from "../services/api.service";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -75,7 +76,7 @@ const reservaBadgeStyle = StyleSheet.create({
 });
 
 export default function Team() {
-  const { isLogged } = useAuth();
+  const { isLogged, userId } = useAuth();
 
   const [teamName, setTeamName] = useState("Meu Time Pokémon");
   const [titulares, setTitulares] = useState<(Pokemon | null)[]>([null, null, null, null, null]);
@@ -89,35 +90,113 @@ export default function Team() {
   const [modalVisible, setModalVisible] = useState(false);
   const [targetSlot, setTargetSlot] = useState<{ type: "titular" | "reserva"; index: number } | null>(null);
 
+  const refreshTeam = async (list: Pokemon[]) => {
+    if (!userId) return;
+    try {
+      const teamData = await apiService.getTeam(userId);
+      
+      const mappedTitulares: (Pokemon | null)[] = [null, null, null, null, null];
+      
+      // Carrega a ordem salva localmente para este usuário
+      const savedOrderStr = await AsyncStorage.getItem(`@team_order_${userId}`);
+      let savedOrder: string[] = [];
+      if (savedOrderStr) {
+        try {
+          savedOrder = JSON.parse(savedOrderStr);
+        } catch {
+          savedOrder = [];
+        }
+      }
+
+      if (teamData.team) {
+        // Se temos uma ordem salva válida com os Pokémons corretos
+        if (savedOrder.length === 5) {
+          savedOrder.forEach((id, idx) => {
+            const apiItem = teamData.team.find((item) => String(item.index) === String(id));
+            if (apiItem) {
+              const match = list.find((p) => p.id === String(apiItem.index));
+              if (match) mappedTitulares[idx] = match;
+            }
+          });
+
+          // Caso algum Pokémon do backend não tenha sido mapeado devido a alterações externas,
+          // preenchemos os slots que restaram nulos
+          teamData.team.forEach((item) => {
+            const alreadyMapped = mappedTitulares.some((p) => p && p.id === String(item.index));
+            if (!alreadyMapped) {
+              const emptyIdx = mappedTitulares.findIndex((p) => p === null);
+              if (emptyIdx !== -1) {
+                const match = list.find((p) => p.id === String(item.index));
+                if (match) mappedTitulares[emptyIdx] = match;
+              }
+            }
+          });
+
+          // Sincroniza a ordem local atualizada (caso algum item tenha sido preenchido fora do savedOrder)
+          const finalOrderIds = mappedTitulares.map((p) => p?.id || "");
+          if (finalOrderIds.every(Boolean)) {
+            await AsyncStorage.setItem(`@team_order_${userId}`, JSON.stringify(finalOrderIds));
+          }
+        } else {
+          // Se não há ordem salva, usamos a ordem padrão retornada pelo backend e a persistimos
+          const initialOrder: string[] = [];
+          teamData.team.forEach((item, idx) => {
+            if (idx < 5) {
+              const match = list.find((p) => p.id === String(item.index));
+              if (match) {
+                mappedTitulares[idx] = match;
+                initialOrder.push(match.id);
+              }
+            }
+          });
+          if (initialOrder.length === 5) {
+            await AsyncStorage.setItem(`@team_order_${userId}`, JSON.stringify(initialOrder));
+          }
+        }
+      }
+      setTitulares(mappedTitulares);
+
+      const mappedReservas: (Pokemon | null)[] = Array(25).fill(null);
+      if (teamData.capture) {
+        teamData.capture.forEach((item, idx) => {
+          if (idx < 25) {
+            const match = list.find((p) => p.id === String(item.index));
+            if (match) mappedReservas[idx] = match;
+          }
+        });
+      }
+      setReservas(mappedReservas);
+    } catch (err) {
+      console.error("Erro ao sincronizar time com a API:", err);
+    }
+  };
+
   useEffect(() => {
     async function loadTeamData() {
+      if (!userId) return;
+      setApiLoading(true);
       try {
         const savedName = await AsyncStorage.getItem("@team_name");
-        const savedTitulares = await AsyncStorage.getItem("@team_titulares");
-        const savedReservas = await AsyncStorage.getItem("@team_reservas");
-
         if (savedName) setTeamName(savedName);
-        if (savedTitulares) setTitulares(JSON.parse(savedTitulares));
-        if (savedReservas) setReservas(JSON.parse(savedReservas));
+
+        // Carrega a Pokédex local para mapeamento
+        const list = await fetchPokemons(151);
+        setAllPokemons(list);
+        setFilteredPokemons(list);
+
+        // Carrega time do backend
+        await refreshTeam(list);
       } catch (err) {
         console.error("Erro ao carregar dados do time:", err);
+      } finally {
+        setApiLoading(false);
       }
     }
     loadTeamData();
-  }, []);
+  }, [userId]);
 
   const loadApiPokemons = async () => {
-    if (allPokemons.length > 0) return;
-    setApiLoading(true);
-    try {
-      const list = await fetchPokemons(151);
-      setAllPokemons(list);
-      setFilteredPokemons(list);
-    } catch (err) {
-      console.error("Erro ao buscar pokémons na API:", err);
-    } finally {
-      setApiLoading(false);
-    }
+    // A lista já é carregada no início (loadTeamData)
   };
 
   if (!isLogged) {
@@ -144,57 +223,87 @@ export default function Team() {
   const handleOpenSelector = (type: "titular" | "reserva", index: number) => {
     setTargetSlot({ type, index });
     setModalVisible(true);
-    loadApiPokemons();
   };
 
   const handleSelectPokemon = async (pokemon: Pokemon) => {
-    if (!targetSlot) return;
+    if (!targetSlot || !userId) return;
 
-    // Verifica se o Pokémon já está em uso em qualquer slot
-    const selectedIds = getSelectedIds();
-
-    // Se está trocando um slot que já tinha um Pokémon, remove o ID antigo da verificação
     const { type, index } = targetSlot;
     const currentInSlot = type === "titular" ? titulares[index] : reservas[index];
-    const effectiveSelectedIds = new Set(selectedIds);
-    if (currentInSlot) effectiveSelectedIds.delete(currentInSlot.id);
 
-    if (effectiveSelectedIds.has(pokemon.id)) {
-      // Pokémon já em uso — fechar modal sem fazer nada
+    setApiLoading(true);
+    try {
+      if (type === "reserva") {
+        // Adiciona à lista de capturados (reserva)
+        await apiService.addCaptured(userId, pokemon.id);
+        await refreshTeam(allPokemons);
+      } else {
+        // Adiciona ao time titular
+        if (currentInSlot) {
+          // Se já existe um Pokémon no slot, substituímos ele
+          // Certifica que o novo Pokémon já está capturado
+          const isCaptured = reservas.some((r) => r && r.id === pokemon.id);
+          if (!isCaptured) {
+            await apiService.addCaptured(userId, pokemon.id);
+          }
+          
+          // 1. Envia a alteração de swap para a API
+          await apiService.swapTeam(userId, currentInSlot.id, pokemon.id);
+
+          // 2. Constrói e salva a nova ordem de visualização no AsyncStorage
+          const newOrder = titulares.map((p, idx) => {
+            if (idx === index) return pokemon.id;
+            return p ? p.id : "";
+          }).filter(Boolean);
+          
+          await AsyncStorage.setItem(`@team_order_${userId}`, JSON.stringify(newOrder));
+
+          // 3. Informa a nova ordenação correta para o backend
+          try {
+            await apiService.reorderTeam(userId, newOrder);
+          } catch (reorderErr) {
+            console.warn("Erro ao reordenar time no servidor:", reorderErr);
+          }
+
+          // 4. Atualiza os dados locais
+          await refreshTeam(allPokemons);
+        } else {
+          // Caso incompleto
+          await apiService.addCaptured(userId, pokemon.id);
+          alert("O time titular deve ter 5 Pokémons. Substitua um Pokémon existente.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Erro ao atualizar time:", err);
+      alert(err.message || "Erro ao atualizar dados na API.");
+    } finally {
+      setApiLoading(false);
       setModalVisible(false);
       setSearchQuery("");
       setTargetSlot(null);
-      return;
     }
-
-    if (type === "titular") {
-      const newTitulares = [...titulares];
-      newTitulares[index] = pokemon;
-      setTitulares(newTitulares);
-      await AsyncStorage.setItem("@team_titulares", JSON.stringify(newTitulares));
-    } else {
-      const newReservas = [...reservas];
-      newReservas[index] = pokemon;
-      setReservas(newReservas);
-      await AsyncStorage.setItem("@team_reservas", JSON.stringify(newReservas));
-    }
-
-    setModalVisible(false);
-    setSearchQuery("");
-    setTargetSlot(null);
   };
 
   const handleRemovePokemon = async (type: "titular" | "reserva", index: number) => {
+    if (!userId) return;
+
     if (type === "titular") {
-      const newTitulares = [...titulares];
-      newTitulares[index] = null;
-      setTitulares(newTitulares);
-      await AsyncStorage.setItem("@team_titulares", JSON.stringify(newTitulares));
-    } else {
-      const newReservas = [...reservas];
-      newReservas[index] = null;
-      setReservas(newReservas);
-      await AsyncStorage.setItem("@team_reservas", JSON.stringify(newReservas));
+      // Abre o seletor para trocar o titular diretamente, mostrando o banner de obrigatoriedade
+      handleOpenSelector("titular", index);
+      return;
+    }
+
+    const pokemon = reservas[index];
+    if (!pokemon) return;
+
+    setApiLoading(true);
+    try {
+      await apiService.deleteCaptured(userId, pokemon.id);
+      await refreshTeam(allPokemons);
+    } catch (err: any) {
+      alert(err.message || "Erro ao remover Pokémon capturado.");
+    } finally {
+      setApiLoading(false);
     }
   };
 
@@ -337,6 +446,15 @@ export default function Team() {
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
+
+            {targetSlot?.type === "titular" && (
+              <View style={styles.bannerContainer}>
+                <Ionicons name="warning" size={18} color="#FFD600" />
+                <Text style={styles.bannerText}>
+                  Atenção: O time titular deve ter sempre 5 Pokémons. Selecione um substituto para continuar.
+                </Text>
+              </View>
+            )}
 
             <View style={styles.searchBarContainer}>
               <Ionicons name="search" size={18} color="#8FA8C0" style={styles.searchIcon} />
@@ -727,6 +845,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     marginBottom: 16,
+  },
+  bannerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 214, 0, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 214, 0, 0.2)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    gap: 8,
+  },
+  bannerText: {
+    color: "#FFD600",
+    fontSize: 12,
+    fontWeight: "700",
+    flex: 1,
   },
   modalTitle: {
     color: "#FFFFFF",

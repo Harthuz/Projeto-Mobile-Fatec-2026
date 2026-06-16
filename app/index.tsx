@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  TouchableOpacity,
 } from "react-native";
 
 import { router } from "expo-router";
@@ -17,10 +18,11 @@ import { Button } from "../components/Button";
 import { Alert } from "../components/Alerts";
 
 export default function Login() {
-  const { login, loading } = useAuth();
+  const { login, register, loading } = useAuth();
 
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const [alertVisible, setAlertVisible] = useState(false);
@@ -39,24 +41,43 @@ export default function Login() {
     setAlertVisible(true);
   }
 
-  async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
-      showAlert("Campos obrigatórios", "Preencha e-mail e senha para continuar.", "warning");
+  async function handleSubmit() {
+    if (!username.trim() || !password.trim()) {
+      showAlert("Campos obrigatórios", "Preencha usuário e senha para continuar.", "warning");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      await login();
-      showAlert("Bem-vindo, Treinador!", "Pokédex carregada com sucesso.", "success");
+      if (isRegisterMode) {
+        await register(username.trim(), password);
+        showAlert("Sucesso!", "Conta criada com sucesso! Realizando login...", "success");
+        
+        // Auto-login após registrar
+        setTimeout(async () => {
+          try {
+            await login(username.trim(), password);
+            router.replace("/pokemons");
+          } catch {
+            setIsRegisterMode(false);
+            showAlert("Entrar", "Conta criada. Insira suas credenciais para entrar.", "info");
+          }
+        }, 1200);
+      } else {
+        await login(username.trim(), password);
+        showAlert("Bem-vindo, Treinador!", "Pokédex carregada com sucesso.", "success");
 
-      // Pequeno delay para o alert aparecer antes de navegar
-      setTimeout(() => {
-        router.replace("/pokemons");
-      }, 800);
-    } catch {
-      showAlert("Erro", "Não foi possível fazer login. Tente novamente.", "error");
+        setTimeout(() => {
+          router.replace("/pokemons");
+        }, 800);
+      }
+    } catch (err: any) {
+      showAlert(
+        "Erro",
+        err.message || "Não foi possível concluir a ação. Verifique suas credenciais.",
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -95,16 +116,17 @@ export default function Login() {
 
         {/* ── Título ── */}
         <Text style={styles.title}>POKÉDEX</Text>
-        <Text style={styles.subtitle}>Faça login para acessar</Text>
+        <Text style={styles.subtitle}>
+          {isRegisterMode ? "Crie sua conta de Treinador" : "Faça login para acessar"}
+        </Text>
 
         {/* ── Card de formulário ── */}
         <View style={styles.card}>
-          <Text style={styles.label}>E-MAIL</Text>
+          <Text style={styles.label}>USUÁRIO / USERNAME</Text>
           <Input
-            placeholder="trainer@pokemon.com"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
+            placeholder="Ex: kleber"
+            value={username}
+            onChangeText={setUsername}
             autoCapitalize="none"
             returnKeyType="next"
           />
@@ -116,17 +138,26 @@ export default function Login() {
             onChangeText={setPassword}
             secureTextEntry
             returnKeyType="done"
-            onSubmitEditing={handleLogin}
+            onSubmitEditing={handleSubmit}
           />
 
           <Button
-            title="Entrar"
-            onPress={handleLogin}
+            title={isRegisterMode ? "Criar Conta" : "Entrar"}
+            onPress={handleSubmit}
             isLoading={isLoading}
           />
         </View>
 
-        <Text style={styles.hint}>Use qualquer credencial para acessar</Text>
+        <TouchableOpacity
+          onPress={() => setIsRegisterMode(!isRegisterMode)}
+          style={{ padding: 10 }}
+        >
+          <Text style={styles.hint}>
+            {isRegisterMode
+              ? "Já possui uma conta? Faça login aqui"
+              : "Não tem uma conta? Cadastre-se aqui"}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* ── Alert multiplataforma ── */}
