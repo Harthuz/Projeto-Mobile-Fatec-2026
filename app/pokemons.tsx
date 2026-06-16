@@ -12,6 +12,7 @@ import {
   UIManager,
   Platform,
   Animated,
+  TouchableOpacity,
 } from "react-native";
 import { useState, useEffect, useRef } from "react";
 import { Redirect } from "expo-router";
